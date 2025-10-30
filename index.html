@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Weather App</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --accent:#4fd1c5;
+      --muted:#98a0b3;
+      --glass: rgba(255,255,255,0.03);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;
+      background: linear-gradient(180deg,#071028 0%, #071a2a 60%);
+      color:#e6eef6;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+    .container{
+      width:100%;
+      max-width:520px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:14px;
+      padding:20px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    header{display:flex;align-items:center;gap:12px}
+    .logo{
+      width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:700;color:#042027;font-size:20px
+    }
+    h1{margin:0;font-size:18px}
+    p.lead{margin:4px 0 14px;color:var(--muted);font-size:13px}
+
+    form{
+      display:flex;gap:8px;align-items:center;margin-bottom:16px
+    }
+    input[name=location]{
+      flex:1;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit;outline:none;font-size:15px
+    }
+    button{padding:10px 14px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#7dd3fc);color:#042027;font-weight:600;cursor:pointer}
+    button:disabled{opacity:0.6;cursor:default}
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);
+      display:flex;gap:14px;align-items:center;justify-content:space-between
+    }
+    .left{display:flex;flex-direction:column}
+    .temp{font-size:44px;font-weight:700;margin:0}
+    .desc{margin-top:6px;color:var(--muted);font-size:14px}
+    .meta{margin-top:8px;color:var(--muted);font-size:13px}
+
+    .icon{width:96px;height:96px;display:flex;align-items:center;justify-content:center}
+    img.weather-icon{width:96px;height:96px}
+
+    .error{margin-top:12px;color:#ffb4b4;background:rgba(255,180,180,0.04);padding:10px;border-radius:8px;border:1px solid rgba(255,100,100,0.06)}
+
+    .footer{margin-top:12px;font-size:13px;color:var(--muted);text-align:center}
+
+    .loader{
+      width:20px;height:20px;border-radius:50%;border:3px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite;display:inline-block;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    @media (max-width:480px){.temp{font-size:34px}.icon img{width:72px;height:72px}}
+  </style>
+</head>
+<body>
+  <div class="container" role="main">
+    <header>
+      <div class="logo">W</div>
+      <div>
+        <h1>Simple Weather</h1>
+        <p class="lead">Enter a city or town to get today's temperature (uses OpenWeatherMap)</p>
+      </div>
+    </header>
+
+    <form id="searchForm" aria-label="Search weather">
+      <input type="text" name="location" id="locationInput" placeholder="e.g. Mumbai or New York" autocomplete="off" required />
+      <button id="searchBtn" type="submit">Get Weather</button>
+    </form>
+
+    <div id="resultArea">
+      <!-- results injected here -->
+    </div>
+
+    <p class="footer">Tip: You can also press Enter after typing the city name.</p>
+  </div>
+
+  <script>
+    // ====== Configuration ======
+    // Using the API key you provided. This uses OpenWeatherMap's current weather endpoint.
+    const API_KEY = 'd3432f351463406480a135613253010';
+    const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+
+    // ====== Helpers ======
+    const $ = (sel) => document.querySelector(sel);
+    const showError = (msg) => {
+      const area = $('#resultArea');
+      area.innerHTML = `<div class="error" role="alert">${escapeHtml(msg)}</div>`;
+    };
+
+    function escapeHtml(str){
+      return str.replace(/[&<>"']/g, (c)=>({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"
+      }[c]));
+    }
+
+    function renderWeather(data){
+      const name = data.name + (data.sys && data.sys.country ? (', ' + data.sys.country) : '');
+      const temp = Math.round(data.main.temp);
+      const feels = Math.round(data.main.feels_like);
+      const desc = data.weather && data.weather[0] ? data.weather[0].description : '';
+      const icon = data.weather && data.weather[0] ? data.weather[0].icon : '';
+      const humidity = data.main.humidity;
+      const wind = data.wind && data.wind.speed ? data.wind.speed : null;
+
+      const iconUrl = icon ? `https://openweathermap.org/img/wn/${icon}@2x.png` : '';
+
+      const html = `
+        <div class="card">
+          <div class="left">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div>
+                <p class="temp">${temp}°C</p>
+                <div class="desc">${escapeHtml(capitalize(desc))}</div>
+              </div>
+            </div>
+            <div class="meta">${escapeHtml(name)} &middot; Feels like ${feels}°C &middot; Humidity ${humidity}%${wind? ' &middot; Wind ' + wind + ' m/s':''}</div>
+          </div>
+
+          <div class="icon">
+            ${iconUrl ? `<img class="weather-icon" src="${iconUrl}" alt="${escapeHtml(desc)}"/>` : ''}
+          </div>
+        </div>
+      `;
+
+      $('#resultArea').innerHTML = html;
+    }
+
+    function capitalize(s){ if(!s) return ''; return s.split(' ').map(w=>w[0]? w[0].toUpperCase()+w.slice(1):'').join(' '); }
+
+    // ====== Main logic ======
+    const form = $('#searchForm');
+    const input = $('#locationInput');
+    const btn = $('#searchBtn');
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const q = input.value.trim();
+      if(!q){ showError('Please enter a city or location name.'); return; }
+
+      // show loading
+      $('#resultArea').innerHTML = `<div style="display:flex;gap:10px;align-items:center"><span class="loader" aria-hidden="true"></span><div style="color:var(--muted)">Fetching weather for <strong>${escapeHtml(q)}</strong>...</div></div>`;
+      btn.disabled = true;
+
+      try{
+        const url = `${BASE_URL}?q=${encodeURIComponent(q)}&appid=${API_KEY}&units=metric`;
+        const res = await fetch(url);
+        if(!res.ok){
+          if(res.status === 401) throw new Error('Invalid API key (401). Please check the key.');
+          if(res.status === 404) throw new Error('Location not found. Try a different city name.');
+          throw new Error('Error fetching weather. HTTP ' + res.status);
+        }
+        const data = await res.json();
+        renderWeather(data);
+      }catch(err){
+        showError(err.message || 'Unknown error');
+      }finally{
+        btn.disabled = false;
+      }
+    });
+
+    // optional: press Enter also handled by form submit
+
+    // accessibility: focus input on load
+    input.focus();
+
+    // If you want to fetch by browser geolocation instead, you could implement it here.
+  </script>
+</body>
+</html>
